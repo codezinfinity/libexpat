@@ -322,34 +322,38 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/lib)
 if(MSVC)
     add_definitions(-D_CRT_SECURE_NO_WARNINGS -wd4996)
 endif()
-if(WIN32)
-    if(_EXPAT_UNICODE_WCHAR_T)
-        set(_POSTFIX_WIDE "w")
-    endif()
 
-    if(MSVC AND NOT EXPAT_SHARED_LIBS)
-        if(EXPAT_MSVC_STATIC_CRT)
-            set(_POSTFIX_CRT "MT")
-        else()
-            set(_POSTFIX_CRT "MD")
-        endif()
-    endif()
-
-    foreach(postfix_var
-            CMAKE_DEBUG_POSTFIX
-            CMAKE_RELEASE_POSTFIX
-            CMAKE_MINSIZEREL_POSTFIX
-            CMAKE_RELWITHDEBINFO_POSTFIX
-            )
-        if(postfix_var STREQUAL "CMAKE_DEBUG_POSTFIX")
-            set(_POSTFIX_DEBUG "d")
-        else()
-            set(_POSTFIX_DEBUG "")
-        endif()
-
-        set(${postfix_var} "${_POSTFIX_WIDE}${_POSTFIX_DEBUG}${_POSTFIX_CRT}" CACHE STRING "Windows binary postfix, e.g. libexpat<postfix=[w][d][MD|MT]>.lib")
-    endforeach()
+#
+# Library filename postfix
+#
+if(_EXPAT_UNICODE)
+    set(_POSTFIX_WIDE "w")
 endif()
+
+if(MSVC AND NOT EXPAT_SHARED_LIBS)
+    if(EXPAT_MSVC_STATIC_CRT)
+        set(_POSTFIX_CRT "MT")
+    else()
+        set(_POSTFIX_CRT "MD")
+    endif()
+endif()
+
+# NOTE: _EXPAT_BUILD_TYPE_UPPER can be an empty string
+foreach(postfix_var
+        CMAKE_${_EXPAT_BUILD_TYPE_UPPER}_POSTFIX
+        CMAKE_DEBUG_POSTFIX
+        CMAKE_RELEASE_POSTFIX
+        CMAKE_MINSIZEREL_POSTFIX
+        CMAKE_RELWITHDEBINFO_POSTFIX
+        )
+    if(WIN32 AND postfix_var STREQUAL "CMAKE_DEBUG_POSTFIX")
+        set(_POSTFIX_DEBUG "d")
+    else()
+        set(_POSTFIX_DEBUG "")  # needs a reset because of being looped
+    endif()
+
+    set(${postfix_var} "${_POSTFIX_WIDE}${_POSTFIX_DEBUG}${_POSTFIX_CRT}" CACHE STRING "Library filename postfix, e.g. libexpat<postfix=[w][d][MD|MT]>.lib")
+endforeach()
 
 #
 # C library
@@ -372,15 +376,14 @@ else()
     set(_SHARED STATIC)
 endif()
 
-# Avoid colliding with Expat.dll of Perl's XML::Parser::Expat
+# NOTE: This is to avoid a name collision with Expat.dll of Perl's XML::Parser::Expat.
+#       Everything but MSVC is already adding prefix "lib" automatically.
+#       Besides property OUTPUT_NAME, CMake also takes variables CMAKE_*_POSTFIX (see further up)
+#       into account when putting together the eventual filename.
 if(WIN32 AND NOT MINGW)
-    set(_EXPAT_OUTPUT_NAME libexpat)  # CMAKE_*_POSTFIX applies, see above
+    set(_EXPAT_OUTPUT_NAME libexpat)
 else()
-    if(_EXPAT_UNICODE)
-        set(_EXPAT_OUTPUT_NAME expatw)
-    else()
-        set(_EXPAT_OUTPUT_NAME expat)
-    endif()
+    set(_EXPAT_OUTPUT_NAME expat)
 endif()
 
 add_library(expat ${_SHARED} ${expat_SRCS})
@@ -424,6 +427,8 @@ expat_install(FILES lib/expat.h lib/expat_external.h DESTINATION ${CMAKE_INSTALL
 if(EXPAT_BUILD_PKGCONFIG)
     set(prefix ${CMAKE_INSTALL_PREFIX})
     set(exec_prefix "\${prefix}")
+    # NOTE: _EXPAT_BUILD_TYPE_UPPER can be an empty string
+    set(_EXPAT_LIBRARY_NAME "${_EXPAT_OUTPUT_NAME}${CMAKE_${_EXPAT_BUILD_TYPE_UPPER}_POSTFIX}")
 
     if(CMAKE_INSTALL_LIBDIR MATCHES "^/")
         set(libdir "${CMAKE_INSTALL_LIBDIR}")
